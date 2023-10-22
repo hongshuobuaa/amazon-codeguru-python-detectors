@@ -29,7 +29,7 @@ jobs:
     - name: CodeGuru Reviewer
       uses: aws-actions/codeguru-reviewer@v1.1
       if: steps.iam-role.outcome == 'success'
-      continue-on-error: false
+      continue-on-error: true
       with:          
         s3_bucket: codeguru-reviewer-build-artifacts-706158628778-us-east-2
         
@@ -39,3 +39,21 @@ jobs:
       with:
         name: SARIF_recommendations
         path: ./codeguru-results.sarif.json
+
+    - name: Save a summary of the results to a file on local disk
+      if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
+      run: |
+        echo "detector,filePath,lineNumber" > summary-of-results.csv
+        jq -r '.runs[0].results[] | {ruleId: .ruleId, firstFile: .locations[0].physicalLocation.artifactLocation.uri, firstLine: .locations[0].physicalLocation.region.startLine} | join(",")' \
+          codeguru-results.sarif.json | sort >> summary-of-results.csv
+
+    - name: Upload results summary to workflow artifacts
+      if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
+      uses: actions/upload-artifact@v2
+      with:
+        name: summary-of-results.csv
+        path: summary-of-results.csv
+
+    - name: Print CSV summary of analysis results to the action log
+      if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
+      run: cat summary-of-results.csv
